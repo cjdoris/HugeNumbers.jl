@@ -1,0 +1,7 @@
+name = "HugeNumbers"
+uuid = "8b714bcc-5b7b-49cb-932b-e206ca82d2bc"
+authors = ["Christopher Doris <github.com/cjdoris>"]
+version = "0.1.0"
+
+[compat]
+julia = "1.6"
