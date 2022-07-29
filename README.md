@@ -1,14 +1,15 @@
 # HugeNumbers.jl
 
-A package for working with really huge or really tiny numbers.
+A package for working with **huge or tiny numbers** beyond the dynamic range of
+ordinary floating point numbers.
 
 Exports the number type `Huge{T} <: Real` which is a lot like a floating point number,
 except it has a much larger range.
 
 You can use this for calculating extremely small probabilities, which would normally
-underflow a float.
+underflow a float, or extremely large quantities which would normally overflow.
 
-## What about [LogarithmicNumbers](https://github.com/cjdoris/LogarithmicNumbers.jl)?
+## Relationship to [LogarithmicNumbers](https://github.com/cjdoris/LogarithmicNumbers.jl)
 
 Whereas a logarithmic number stores `log(x)`, we store a different quantity `invhugen(x)`.
 This is the inverse of `hugen(x)`, which has the following nice properties:
