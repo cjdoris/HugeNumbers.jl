@@ -316,7 +316,7 @@ end
 
 function Base.log10(x::Huge)
     logx = log(x)
-    return logx / log(oftype(logx, 2))
+    return logx / log(oftype(logx, 10))
 end
 
 function Base.exp(::Type{Huge}, x::Real)
