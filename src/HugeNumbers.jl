@@ -1,166 +1,138 @@
 module HugeNumbers
 
-export Huge, HugeFloat16, HugeFloat32, HugeFloat64, hugen, invhugen
+export Huge, HugeFloat16, HugeFloat32, HugeFloat64, hexp, hlog
 
 issmall(x) = abs(x) < one(x)
 
-"""
-    hugen(x)
+function h(x)
+    ax = abs(x)
+    ix = inv(ax)
+    r1 = ax - one(ax)
+    r2 = one(ix) - ix
+    r1, r2 = promote(r1, r2)
+    return ifelse(ax < one(ax), r2, r1)
+end
 
-Compute the `hugen` function at `x`.
+function invh(x)
+    r1 = x + one(x)
+    r2 = inv(one(x) - x)
+    r1, r2 = promote(r1, r2)
+    return ifelse(signbit(x), r2, r1)
+end
+
+"""
+    hexp(x)
+
+Compute the `hexp` function at `x`.
 
 It is defined as:
 - `exp(x - 1)` if `x ≥ 1`
 - `exp(1 - 1/x)` if `x ≥ 0`
 - `-exp(1 + 1/x)` if `x ≥ -1`
 - `-exp(-x - 1)` otherwise
-
+    
 It has these nice arithmetic properties:
 - It is an increasing, continuous, differentiable, invertible function on the real numbers.
 - It grows exponentially for large `x` and shrinks exponentially for small `x`.
-- `hugen(x) = x` for `x` in `-Inf`, `-1`, `0`, `1`, `Inf`.
-- `-hugen(x) = hugen(-x)`
-- `1/hugen(x) = hugen(1/x)`
+- `hexp(x) = x` for `x` in `-Inf`, `-1`, `0`, `1`, `Inf`.
+- `-hexp(x) = hexp(-x)`
+- `1/hexp(x) = hexp(1/x)`
 - Its derivative is `1` at `±1`, and `0` at `0`.
 
-The inverse function is [`invhugen`](@ref).
+The inverse function is [`hlog`](@ref).
 """
-function hugen(x)
-    if signbit(x)
-        if issmall(x)
-            return -exp(one(x) + inv(x))
-        else
-            return -exp(-x - one(x))
-        end
-    else
-        if issmall(x)
-            return exp(one(x) - inv(x))
-        else
-            return exp(x - one(x))
-        end
-    end
-end
+hexp(x) = copysign(exp(h(x)), x)
 
 """
-    invhugen(x)
+    hlog(x)
 
-The inverse function of [`hugen`](@ref).
-
-That is, `invhugen(hugen(x)) == x` and `hugen(invhugen(x)) == x` (up to floating point
-precision).
+The inverse function of [`hexp`](@ref).
 """
-function invhugen(x)
-    if signbit(x)
-        y = log(-x)
-        if issmall(x)
-            return inv(y - one(y))
-        else
-            return -y - one(y)
-        end
-    else
-        y = log(x)
-        if issmall(x)
-            return inv(one(y) - y)
-        else
-            return y + one(y)
-        end
-    end
-end
+hlog(x) = copysign(invh(log(abs(x))), x)
+
 
 ### CONSTRUCTION / CONVERSION / PROMOTION
 
 """
     Huge{[T]}(x)
 
-Convert `x` to a `Huge` number, which is represented by `invhugen(x)`.
+Convert `x` to a `Huge` number, which is represented by `hlog(x)`.
 
-If you already know `ix = invhugen(x)`, then you may call `hugen(Huge, ix)` instead.
+If you already know `ix = hlog(x)`, then you may call `hexp(Huge, ix)` instead.
+
+If you already know `lx = log(x)`, then you may call `exp(Huge, ix)` instead.
 """
 struct Huge{T<:Real} <: Real
-    inv::T
-    global hugen(::Type{Huge{T}}, x::T) where {T<:Real} = new{T}(x)
+    hlog::T
+    global hexp(::Type{Huge{T}}, x::T) where {T<:Real} = new{T}(x)
 end
 
 const HugeFloat16 = Huge{Float16}
 const HugeFloat32 = Huge{Float32}
 const HugeFloat64 = Huge{Float64}
 
-"""
-    hugen(Huge, x)
+decon(x::Huge) = (ix = hlog(x); (signbit(ix), abs(ix)))
+recon(sb::Bool, ix::Real) = hexp(Huge, ifelse(sb, -ix, +ix))
 
-Compute `hugen(x)` but the result is stored exactly as a `Huge`.
 """
-hugen(::Type{Huge{T}}, x::Real) where {T<:Real} = hugen(Huge{T}, convert(T, x))
-hugen(::Type{Huge}, x::T) where {T<:Real} = hugen(Huge{T}, x)
+    hexp(Huge, x)
 
-invhugen(x::Huge) = x.inv
-hugen(x::Huge) = hugen(Huge, hugen(invhugen(x)))
+Compute `hexp(x)` but the result is stored exactly as a `Huge`.
+"""
+hexp(::Type{Huge{T}}, x::Real) where {T<:Real} = hexp(Huge{T}, convert(T, x))
+hexp(::Type{Huge}, x::T) where {T<:Real} = hexp(Huge{T}, x)
+
+hlog(x::Huge) = x.hlog
+hexp(x::Huge) = hexp(Huge, hexp(hlog(x)))
 
 Base.convert(::Type{Huge{T}}, x::Huge{T}) where {T} = x
-Base.convert(::Type{Huge{T}}, x::Real) where {T} = hugen(Huge{T}, invhugen(x))
+Base.convert(::Type{Huge{T}}, x::Real) where {T} = hexp(Huge{T}, hlog(x))
 
 Base.convert(::Type{Huge}, x::Huge) = x
-Base.convert(::Type{Huge}, x::Real) = hugen(Huge, invhugen(x))
+Base.convert(::Type{Huge}, x::Real) = hexp(Huge, hlog(x))
 
 Huge(x::Real) = convert(Huge, x)
 
 Huge{T}(x::Real) where {T} = convert(Huge{T}, x)
 
-Base.AbstractFloat(x::Huge) = AbstractFloat(hugen(AbstractFloat(invhugen(x))))
+Base.AbstractFloat(x::Huge) = AbstractFloat(hexp(AbstractFloat(hlog(x))))
 
-Base.BigFloat(x::Huge) = BigFloat(hugen(BigFloat(invhugen(x))))
+Base.BigFloat(x::Huge) = BigFloat(hexp(BigFloat(hlog(x))))
 
 Base.promote_rule(::Type{Huge{T}}, ::Type{Huge{S}}) where {T<:Real, S<:Real} = Huge{promote_type(T, S)}
-Base.promote_rule(::Type{Huge{T}}, ::Type{S}) where {T<:Real, S<:Real} = promote_type(Huge{T}, Huge{S})
+Base.promote_rule(::Type{Huge{T}}, ::Type{S}) where {T<:Real, S<:Real} = promote_type(Huge{T}, typeof(Huge(zero(S))))
 
 
 ### COMPARISONS / PREDICATES
 
-Base.signbit(x::Huge) = signbit(invhugen(x))
+for op in [:signbit, :isfinite, :isinf, :isnan, :iszero, :isone]
+    @eval Base.$op(x::Huge) = $op(hlog(x))
+end
 
-Base.sign(x::Huge) = hugen(Huge, sign(invhugen(x)))
+for op in [:isequal, :isless, :cmp, :(==), :(!=), :(<), :(<=), :(>), :(>=)]
+    @eval Base.$op(x::Huge, y::Huge) = $op(hlog(x), hlog(y))
+end
 
-Base.abs(x::Huge) = hugen(Huge, abs(invhugen(x)))
+for op in [:sign, :abs, :(+), :(-), :inv, :nextfloat, :prevfloat]
+    @eval Base.$op(x::Huge) = hexp(Huge, $op(hlog(x)))
+end
 
-Base.isfinite(x::Huge) = isfinite(invhugen(x))
+for op in [:zero, :one, :typemin, :typemax]
+    @eval Base.$op(::Type{Huge{T}}) where {T} = hexp(Huge, $op(T))
+end
 
-Base.isinf(x::Huge) = isinf(invhugen(x))
-
-Base.isnan(x::Huge) = isnan(invhugen(x))
-
-Base.iszero(x::Huge) = iszero(invhugen(x))
-
-Base.isone(x::Huge) = isone(invhugen(x))
-
-Base.isless(x::Huge, y::Huge) = isless(invhugen(x), invhugen(y))
-
-Base.isequal(x::Huge, y::Huge) = isequal(invhugen(x), invhugen(y))
-
-Base.:(==)(x::Huge, y::Huge) = isless(invhugen(x), invhugen(y))
-
-Base.:(<)(x::Huge, y::Huge) = invhugen(x) < invhugen(y)
-
-Base.cmp(x::Huge, y::Huge) = cmp(invhugen(x), invhugen(y))
+for op in [:nextfloat, :prevfloat]
+    @eval Base.$op(x::Huge, n::Integer) = hexp(Huge, $op(hlog(x), n))
+end
 
 Base.zero(::Type{Huge}) = zero(Huge{Int})
-Base.zero(::Type{Huge{T}}) where {T<:Real} = hugen(Huge, zero(T))
 
 Base.one(::Type{Huge}) = one(Huge{Int})
-Base.one(::Type{Huge{T}}) where {T<:Real} = hugen(Huge, one(T))
 
 # We hash the inner value, which for free means that hash(Huge(x)) == hash(x) for x in
 # [-Inf, -1, 0, 1, Inf], which are also the only values likely to overlap with other types.
-Base.hash(x::Huge, h::UInt) = hash(invhugen(x), h)
+Base.hash(x::Huge, h::UInt) = hash(hlog(x), h)
 
-Base.typemin(::Type{Huge{T}}) where {T} = hugen(Huge, typemin(T))
-
-Base.typemax(::Type{Huge{T}}) where {T} = hugen(Huge, typemax(T))
-
-Base.nextfloat(x::Huge) = hugen(Huge, nextfloat(invhugen(x)))
-Base.nextfloat(x::Huge, n::Integer) = hugen(Huge, nextfloat(invhugen(x), n))
-
-Base.prevfloat(x::Huge) = hugen(Huge, prevfloat(invhugen(x)))
-Base.prevfloat(x::Huge, n::Integer) = hugen(Huge, prevfloat(invhugen(x), n))
 
 ### TYPES
 
@@ -171,135 +143,75 @@ Base.big(x::Huge) = convert(big(typeof(x)), x)
 Base.widen(::Type{Huge{T}}) where {T} = Huge{widen(T)}
 Base.widen(x::Huge) = convert(widen(typeof(x)), x)
 
-Base.float(::Type{Huge{T}}) where {T} = Huge{float(T)}
 
 ### ARITHMETIC
 
-Base.:(-)(x::Huge) = hugen(Huge, -invhugen(x))
-
-Base.inv(x::Huge) = hugen(Huge, inv(invhugen(x)))
-
 function Base.:(*)(x::Huge{T}, y::Huge{T}) where {T}
-    ix = invhugen(x)
-    iy = invhugen(y)
-    if signbit(ix)
-        if signbit(iy)
-            ir = _mul(-ix, -iy)
+    sx, ix = decon(x)
+    sy, iy = decon(y)
+    sr = xor(sx, sy)
+    ir = invh(h(ix) + h(iy))
+    return recon(sr, ir)
+end
+
+function Base.:(/)(x::Huge{T}, y::Huge{T}) where {T}
+    sx, ix = decon(x)
+    sy, iy = decon(y)
+    sr = xor(sx, sy)
+    ir = invh(h(ix) - h(iy))
+    return recon(sr, ir)
+end
+
+function Base.:(^)(x::Huge, p::Real) where {T}
+    sx, ix = decon(x)
+    if sx && !iszero(ix) && !isnan(ix)
+        if isinteger(p)
+            sr = isodd(p)
         else
-            ir = -_mul(-ix, iy)
+            throw(DomainError(x, "Can only take integer powers of negative Huge numbers."))
         end
     else
-        if signbit(iy)
-            ir = -_mul(ix, -iy)
-        else
-            ir = _mul(ix, iy)
-        end
+        sr = false
     end
-    return hugen(Huge, ir)
+    ir = invh(h(ix) * p)
+    return recon(sr, ir)
 end
 
-Base.:(/)(x::Huge{T}, y::Huge{T}) where {T} = x * inv(y)
+function Base.:(^)(x::Huge, p::Integer) where {T}
+    sx, ix = decon(x)
+    sr = sx && isodd(p)
+    ir = invh(h(ix) * p)
+    return recon(sr, ir)    
+end
 
-function _mul(ix, iy)
-    if issmall(ix)
-        if issmall(iy)
-            inv(__mul(inv(ix), inv(iy)))
+Base.:(+)(x::Huge{T}, y::Huge{T}) where {T} = _add(decon(x)..., decon(y)...)
+
+function _add(sx, ix, sy, iy)
+    se = xor(sx, sy)
+    sr = se ? xor(ix > iy, sy) : sx
+    a, b = minmax(ix, iy)
+    ha = h(a)
+    hb = h(b)
+    c = ha - hb
+    if se
+        if c < oftype(c, -1)
+            d = log(-expm1(c))
         else
-            __div(iy, inv(ix))
+            d = log1p(-exp(c))
         end
     else
-        if issmall(iy)
-            __div(ix, inv(iy))
-        else
-            __mul(ix, iy)
-        end
+        d = log1p(exp(c))
     end
+    ir = invh(hb + d)
+    return recon(sr, ir)    
 end
 
-function __mul(ix, iy)
-    iz = ix + iy
-    return iz - one(iz)
-end
+Base.:(-)(x::Huge{T}, y::Huge{T}) where {T} = _sub(decon(x)..., decon(y)...)
 
-function __div(ix, iy)
-    iz = ix - iy
-    if signbit(iz)
-        return inv(-iz + one(iz))
-    else
-        return iz + one(iz)
-    end
-end
-
-function Base.:(+)(x::Huge{T}, y::Huge{T}) where {T}
-    ix = invhugen(x)
-    iy = invhugen(y)
-    if signbit(x)
-        if signbit(y)
-            ir = -_add(-ix, -iy)
-        else
-            ir = _sub(iy, -ix)
-        end
-    else
-        if signbit(y)
-            ir = _sub(ix, -iy)
-        else
-            ir = _add(ix, iy)
-        end
-    end
-    return hugen(Huge, ir)
-end
-
-Base.:(-)(x::Huge{T}, y::Huge{T}) where {T} = x + (-y)
-
-function _add(ix, iy)
-    if issmall(ix)
-        if issmall(iy)
-            if ix < iy
-                t = inv(iy) - log1p(exp(inv(iy) - inv(ix)))
-            else
-                t = inv(ix) - log1p(exp(inv(ix) - inv(iy)))
-            end
-            return t < one(t) ? one(t) + one(t) - t : inv(t)
-        else
-            return iy + log1p(exp((one(ix) - inv(ix)) - (iy - one(iy))))
-        end
-    else
-        if issmall(iy)
-            return ix + log1p(exp((one(iy) - inv(iy)) - (ix - one(ix))))
-        else
-            if ix < iy
-                return iy + log1p(exp(ix - iy))
-            else
-                return ix + log1p(exp(iy - ix))
-            end
-        end
-    end
-end
-
-function _sub(ix, iy)
-    if ix < iy
-        return -__sub(iy, ix)
-    else
-        return __sub(ix, iy)
-    end
-end
-
-function __sub(ix, iy)
-    if issmall(ix)
-        @assert issmall(iy) || isnan(iy)
-        return inv(inv(ix) - log1p(-exp(inv(ix) - inv(iy))))
-    else
-        if issmall(iy)
-            ir = ix + log1p(-exp((one(iy) - inv(iy)) - (ix - one(ix))))
-        else
-            ir = ix + log1p(-exp(iy - ix))
-        end
-        return ir < one(ir) ? inv(one(ir) + one(ir) - ir) : ir
-    end
-end
+_sub(sx, ix, sy, iy) = _add(sx, ix, !sy, iy)
 
 function Base.log(x::Huge)
-    ix = invhugen(x)
+    ix = hlog(x)
     if signbit(ix) && !iszero(ix) && !isnan(ix)
         throw(DomainError(x))
     elseif issmall(ix)
@@ -319,13 +231,17 @@ function Base.log10(x::Huge)
     return logx / log(oftype(logx, 10))
 end
 
+function Base.exp(x::Huge)
+    return hexp(Huge, invh(hexp(hlog(x))))
+end
+
 function Base.exp(::Type{Huge}, x::Real)
     if signbit(x)
         ir = inv(one(x) - x)
     else
         ir = x + inv(inv(one(x)))
     end
-    return hugen(Huge, ir)
+    return hexp(Huge, ir)
 end
 
 function Base.exp(::Type{Huge{T}}, x::Real) where {T}
@@ -334,28 +250,28 @@ function Base.exp(::Type{Huge{T}}, x::Real) where {T}
     else
         ir = convert(T, x) + one(T)
     end
-    return hugen(Huge{T}, ir)
+    return hexp(Huge{T}, ir)
 end
 
 
 ## IO
 
 function Base.show(io::IO, x::Huge)
-    print(io, "hugen(")
+    print(io, "hexp(")
     if get(io, :typeinfo, Any) != typeof(x)
         show(io, typeof(x))
         print(io, ", ")
     end
-    show(io, invhugen(x))
+    show(io, hlog(x))
     print(io, ")")
 end
 
 function Base.write(io::IO, x::Huge)
-    write(io, invhugen(x))
+    write(io, hlog(x))
 end
 
 function Base.read(io::IO, ::Type{Huge{T}}) where {T}
-    hugen(Huge{T}, read(io, T))
+    hexp(Huge{T}, read(io, T))
 end
 
 end # module
