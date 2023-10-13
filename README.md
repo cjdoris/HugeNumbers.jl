@@ -16,9 +16,6 @@ To convert a number `x` to a `Huge` number:
 - If you already know `ix = hlog(x)` then `hexp(Huge, ix)` is faster.
 - If you already know `lx = log(x)` then `exp(Huge, lx)` is faster.
 
-Convert a number `x` to a `Huge` number with `convert(Huge, x)` or `Huge(x)`. If you
-happen to already know `ix = hlog(x)` then `hexp(Huge, ix)` is faster.
-
 The following operations are implemented and accurate:
 - **Arithmetic:** `+`, `-`, `*`, `/`, `^`, `inv`.
 - **Ordering:** `==`, `<`, `cmp`, `isequal`, `isless`, `sign`, `signbit`, `abs`.
@@ -30,7 +27,7 @@ The following operations are implemented and accurate:
 - **Misc:** `nextfloat`, `prevfloat`, `hash`.
 - **Note:** Any functions not mentioned here might be inaccurate.
 
-### Interoperability with other packages
+## Interoperability with other packages
 
 It is natural to use this package in conjunction with other packages which return
 logarithms. The general pattern is that you can use `exp(Huge, logfunc(args...))`
